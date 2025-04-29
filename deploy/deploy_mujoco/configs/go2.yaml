@@ -1,0 +1,18 @@
+# 최종 수정된 Go2 로봇 설정 파일
+xml_path: "{LEGGED_GYM_ROOT_DIR}/resources/robots/go2_description/scene.xml"
+
+# 안정적인 서있는 자세를 위한 수정된 각도
+# FR_hip, FR_thigh, FR_calf, FL_hip, FL_thigh, FL_calf, RR_hip, RR_thigh, RR_calf, RL_hip, RL_thigh, RL_calf
+default_angles: [0.0, 0.8, -1.6, 0.0, 0.8, -1.6, 0.0, 0.8, -1.6, 0.0, 0.8, -1.6]
+
+# 공식 게인값보다 약간 높은 값으로 설정 (더 안정적인 자세 유지)
+kps: [120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120]
+kds: [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+
+# 동작 스케일링 팩터
+cmd_scale: [2.5, 1.5, 0.3]
+action_scale: 0.2
+
+# 물리적 파라미터
+initial_height: 0.40  # 좀 더 높은 초기 위치
+stabilization_steps: 1000  # 충분한 안정화 기간
