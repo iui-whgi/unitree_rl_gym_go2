@@ -1,7 +1,6 @@
 import os
 import yaml
 import time
-import math
 import argparse
 import numpy as np
 from mujoco import viewer
@@ -31,141 +30,6 @@ def quaternion_from_euler(roll, pitch, yaw):
     z = cr * cp * sy - sr * sp * cy
     
     return np.array([w, x, y, z])
-
-def generate_walking_pattern(phase, gait_type="trot", command=None):
-    """
-    Generate a walking pattern for a quadruped robot
-    
-    Parameters:
-    - phase: Current phase of the locomotion cycle (0.0 to 1.0)
-    - gait_type: Type of gait ("trot", "walk", "pace", "bound", "stand")
-    - command: Movement command [vx, vy, omega] or None
-    
-    Returns:
-    - Array of 12 joint angles for the robot
-    """
-    if command is None:
-        command = [0.5, 0.0, 0.0]  # Default: forward movement
-        
-    vx, vy, omega = command
-    speed_factor = min(1.0, math.sqrt(vx*vx + vy*vy + omega*omega))
-    
-    # Define leg phases based on gait type
-    # Order: FR, FL, RR, RL
-    if gait_type == "trot":
-        leg_phases = [0.0, 0.5, 0.5, 0.0]  # Diagonal legs move together
-    elif gait_type == "walk":
-        leg_phases = [0.0, 0.25, 0.5, 0.75]  # Sequential leg movement
-    elif gait_type == "pace":
-        leg_phases = [0.0, 0.5, 0.0, 0.5]  # Side pairs move together
-    elif gait_type == "bound":
-        leg_phases = [0.0, 0.0, 0.5, 0.5]  # Front and rear pairs move together
-    elif gait_type == "stand":
-        # For standing, use default pose
-        return np.array([
-            0.0, 0.8, -1.6,  # FR: hip, thigh, calf
-            0.0, 0.8, -1.6,  # FL: hip, thigh, calf
-            0.0, 0.8, -1.6,  # RR: hip, thigh, calf
-            0.0, 0.8, -1.6   # RL: hip, thigh, calf
-        ])
-    else:
-        leg_phases = [0.0, 0.5, 0.5, 0.0]  # Default to trot
-    
-    # Base pose parameters
-    base_angles = np.array([
-        0.0, 0.8, -1.6,  # FR: hip, thigh, calf
-        0.0, 0.8, -1.6,  # FL: hip, thigh, calf
-        0.0, 0.8, -1.6,  # RR: hip, thigh, calf
-        0.0, 0.8, -1.6   # RL: hip, thigh, calf
-    ])
-    
-    # Gait parameters
-    step_height = 0.1 * speed_factor      # Maximum leg lift height
-    hip_swing = 0.25 * speed_factor       # Forward/backward hip movement
-    hip_side = 0.05 * speed_factor        # Sideways hip movement
-    hip_turn = 0.15 * speed_factor * omega  # Hip rotation component
-    
-    # Movement modifiers based on command
-    fwd_factor = vx / max(0.1, math.sqrt(vx*vx + vy*vy))  # Forward direction component
-    side_factor = vy / max(0.1, math.sqrt(vx*vx + vy*vy))  # Sideways component
-    
-    # Calculate joint angles for each leg
-    result = base_angles.copy()
-    leg_idx_map = [0, 1, 2, 3]  # FR, FL, RR, RL
-    
-    for i, leg_idx in enumerate(leg_idx_map):
-        # Compute the leg's phase in the cycle
-        leg_phase = (phase + leg_phases[i]) % 1.0
-        
-        # Joint indices for this leg
-        joint_idx = leg_idx * 3
-        
-        # Determine if the leg is in swing or stance phase
-        if leg_phase < 0.5:  # Swing phase
-            # Normalize swing phase to 0.0 - 1.0
-            swing_phase = leg_phase * 2.0
-            
-            # Hip joint - forward/backward motion
-            hip_offset = hip_swing * math.sin(swing_phase * math.pi)
-            
-            # For side movement and turning
-            is_right_leg = (leg_idx == 0 or leg_idx == 2)  # FR or RR
-            is_front_leg = (leg_idx == 0 or leg_idx == 1)  # FR or FL
-            
-            # Side movement contribution
-            side_offset = hip_side * side_factor
-            if is_right_leg:
-                side_offset = -side_offset
-                
-            # Turning contribution
-            turn_offset = hip_turn
-            if not is_front_leg:
-                turn_offset = -turn_offset
-                
-            # Hip movement direction adjustment based on leg position
-            if leg_idx == 1 or leg_idx == 3:  # FL or RL (left legs)
-                hip_offset = -hip_offset
-                
-            # Apply hip rotation for forward, side, and turning motion
-            result[joint_idx] = base_angles[joint_idx] + hip_offset * fwd_factor + side_offset + turn_offset
-            
-            # Thigh and calf joints - leg lifting
-            leg_lift = step_height * math.sin(swing_phase * math.pi)
-            result[joint_idx + 1] = base_angles[joint_idx + 1] - leg_lift  # Thigh up
-            result[joint_idx + 2] = base_angles[joint_idx + 2] + leg_lift * 0.5  # Calf compensate
-            
-        else:  # Stance phase
-            # Normalize stance phase to 0.0 - 1.0
-            stance_phase = (leg_phase - 0.5) * 2.0
-            
-            # Hip joint - forward/backward motion (in opposite direction to swing)
-            hip_offset = -hip_swing * math.sin(stance_phase * math.pi)
-            
-            # For side movement and turning
-            is_right_leg = (leg_idx == 0 or leg_idx == 2)  # FR or RR
-            is_front_leg = (leg_idx == 0 or leg_idx == 1)  # FR or FL
-            
-            # Side movement contribution
-            side_offset = hip_side * side_factor
-            if is_right_leg:
-                side_offset = -side_offset
-                
-            # Turning contribution
-            turn_offset = hip_turn
-            if not is_front_leg:
-                turn_offset = -turn_offset
-                
-            # Hip movement direction adjustment based on leg position
-            if leg_idx == 1 or leg_idx == 3:  # FL or RL (left legs)
-                hip_offset = -hip_offset
-                
-            # Apply hip rotation for forward, side, and turning motion
-            result[joint_idx] = base_angles[joint_idx] + hip_offset * fwd_factor + side_offset + turn_offset
-            
-            # Thigh and calf joints - maintain ground contact
-            # Keep the default angles for stance phase
-    
-    return result
 
 def main(args):
     if not args.endswith('.yaml'):
@@ -246,6 +110,12 @@ def main(args):
         print(f"Mapped actuator {act_idx} ({actuator_names[act_idx]}) -> joint {info['joint_name']} (qpos[{info['qpos_idx']}])")
     
     # 기본 설정 불러오기
+    # 중요: 뒷다리의 각도 부호를 수동으로 반전하여 모델에 맞춤
+    original_default_angles = np.array(cfg['default_angles'])
+    default_angles = original_default_angles.copy()
+    
+    # 로봇이 4다리로 서있는 안정적인 자세로 수정 (공식 문서 기준)
+    # 모든 다리에 동일한 스타일 적용, 뒷다리는 앞다리와 대칭
     default_angles = np.array([
         0.0, 0.8, -1.6,  # FR: hip, thigh, calf
         0.0, 0.8, -1.6,  # FL: hip, thigh, calf
@@ -253,7 +123,8 @@ def main(args):
         0.0, 0.8, -1.6   # RL: hip, thigh, calf
     ])
     
-    print(f"Default angles: {default_angles}")
+    print(f"Original default angles: {original_default_angles}")
+    print(f"Modified default angles: {default_angles}")
     
     # PD 제어기 게인
     kps = np.array(cfg.get('kps', [100.0] * model.nu))
@@ -369,31 +240,6 @@ def main(args):
     
     print("\nStabilization complete. Starting main simulation...")
     
-    # 걷기 패턴 설정
-    phase = 0.0                 # 현재 보행 위상 (0.0~1.0)
-    current_gait = "stand"      # 시작 보행 패턴
-    gait_frequency = 1.0        # 보행 주기 (Hz)
-    movement_command = [0.0, 0.0, 0.0]  # 초기 이동 명령 [vx, vy, omega]
-    
-    # 보행 시퀀스 정의 (시간, 보행 패턴, 이동 명령)
-    gait_sequence = [
-        (0.0, "stand", [0.0, 0.0, 0.0]),       # 시작: 서있기
-        (5.0, "trot", [0.3, 0.0, 0.0]),        # 5초: 트롯 걸음으로 전진
-        (10.0, "trot", [0.5, 0.0, 0.0]),       # 10초: 빠른 트롯
-        (15.0, "trot", [0.0, 0.2, 0.0]),       # 15초: 오른쪽으로 이동
-        (20.0, "trot", [0.0, -0.2, 0.0]),      # 20초: 왼쪽으로 이동
-        (25.0, "trot", [0.3, 0.0, 0.2]),       # 25초: 우회전하며 전진
-        (30.0, "trot", [0.3, 0.0, -0.2]),      # 30초: 좌회전하며 전진
-        (35.0, "walk", [0.3, 0.0, 0.0]),       # 35초: 워크 걸음으로 전진
-        (40.0, "pace", [0.3, 0.0, 0.0]),       # 40초: 페이스 걸음으로 전진
-        (45.0, "bound", [0.4, 0.0, 0.0]),      # 45초: 바운드 걸음으로 전진
-        (50.0, "trot", [0.3, 0.0, 0.0]),       # 50초: 다시 트롯 걸음
-        (55.0, "stand", [0.0, 0.0, 0.0]),      # 55초: 서있기로 복귀
-    ]
-    
-    # 현재 시퀀스 인덱스
-    sequence_idx = 0
-    
     # 메인 시뮬레이션 루프
     t0 = time.time()
     sim_time = 0.0
@@ -401,30 +247,14 @@ def main(args):
     reset_counter = 0
     
     try:
-        while sim_time < 60.0 and viewer_obj.is_running() and reset_counter < 5:
-            # 시퀀스 업데이트 확인
-            if sequence_idx < len(gait_sequence) and sim_time >= gait_sequence[sequence_idx][0]:
-                _, current_gait, movement_command = gait_sequence[sequence_idx]
-                print(f"Time: {sim_time:.1f}s - Changing gait to '{current_gait}' with command {movement_command}")
-                sequence_idx += 1
-            
-            # 위상 업데이트 (걷는 속도에 영향)
-            # 'stand' 상태에서는 위상 변화 없음
-            if current_gait != "stand":
-                phase += model.opt.timestep * gait_frequency
-                if phase >= 1.0:
-                    phase -= 1.0
-            
-            # 보행 패턴 생성
-            target_angles = generate_walking_pattern(phase, current_gait, movement_command)
-            
-            # PD 제어 적용
+        while sim_time < 30.0 and viewer_obj.is_running() and reset_counter < 5:
+            # PD 제어 적용하여 자세 유지
             for act_idx, joint_info in actuator_to_joint_map.items():
-                if act_idx < len(target_angles):
+                if act_idx < len(default_angles):
                     qpos_idx = joint_info['qpos_idx']
                     qvel_idx = joint_info['qvel_idx']
                     
-                    error = target_angles[act_idx] - data.qpos[qpos_idx]
+                    error = default_angles[act_idx] - data.qpos[qpos_idx]
                     data.ctrl[act_idx] = kps[act_idx] * error - kds[act_idx] * data.qvel[qvel_idx]
             
             # 시뮬레이션 진행
@@ -438,17 +268,29 @@ def main(args):
             # 초마다 상태 출력
             if step_counter % int(1.0 / model.opt.timestep) == 0:
                 base_height = data.qpos[2]
-                base_vel = data.qvel[:3]
-                print(f"Time: {sim_time:.1f}s, Height: {base_height:.3f}m, Velocity: {base_vel}")
+                base_orientation = data.qpos[3:7]
+                print(f"Time: {sim_time:.1f}s, Height: {base_height:.3f}m, Orientation: {base_orientation}")
+                
+                # 관절 오차 확인
+                large_error_count = 0
+                for act_idx, joint_info in actuator_to_joint_map.items():
+                    if act_idx < len(default_angles):
+                        qpos_idx = joint_info['qpos_idx']
+                        actual = data.qpos[qpos_idx]
+                        target = default_angles[act_idx]
+                        error = target - actual
+                        if abs(error) > 0.3:  # 0.3 라디안 (약 17도) 이상 차이
+                            print(f"  Joint {joint_info['joint_name']}: target={target:.3f}, actual={actual:.3f}, error={error:.3f}")
+                            large_error_count += 1
                 
                 # 넘어졌는지 확인
-                if base_height < 0.2:
-                    print(f"Robot has fallen! Height: {base_height:.3f}m")
+                if base_height < 0.25 and sim_time > 1.0:  # 1초 이후에만 리셋 적용
+                    print(f"Robot appears to have fallen! Height: {base_height:.3f}m")
                     print("Attempting to reset position...")
                     
                     # 위치 및 방향 리셋
                     data.qpos[0:3] = [0, 0, initial_height]
-                    data.qpos[3:7] = quaternion_from_euler(0, pitch_angle, 0)
+                    data.qpos[3:7] = quaternion_from_euler(0, pitch_angle, 0)  # 약간 뒤로 기울인 자세로 리셋
                     
                     # 속도 초기화
                     data.qvel[:] = 0.0
@@ -480,11 +322,6 @@ def main(args):
                     
                     reset_counter += 1
                     print(f"Reset complete. New height: {data.qpos[2]:.3f}m")
-                    
-                    # 걷기 상태 리셋
-                    phase = 0.0
-                    current_gait = "stand"
-                    movement_command = [0.0, 0.0, 0.0]
                 
     except KeyboardInterrupt:
         print("Simulation interrupted by user")

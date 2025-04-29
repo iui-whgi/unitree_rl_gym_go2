@@ -1,18 +1,68 @@
-# 최종 수정된 Go2 로봇 설정 파일
+# Unitree Go2 로봇 보행 제어용 설정 파일
 xml_path: "{LEGGED_GYM_ROOT_DIR}/resources/robots/go2_description/scene.xml"
 
-# 안정적인 서있는 자세를 위한 수정된 각도
+# 기본 자세 각도 (모든 다리 동일)
 # FR_hip, FR_thigh, FR_calf, FL_hip, FL_thigh, FL_calf, RR_hip, RR_thigh, RR_calf, RL_hip, RL_thigh, RL_calf
 default_angles: [0.0, 0.8, -1.6, 0.0, 0.8, -1.6, 0.0, 0.8, -1.6, 0.0, 0.8, -1.6]
 
-# 공식 게인값보다 약간 높은 값으로 설정 (더 안정적인 자세 유지)
+# PD 제어기 게인 (보행에 맞게 조정)
 kps: [120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120, 120]
 kds: [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
 
-# 동작 스케일링 팩터
-cmd_scale: [2.5, 1.5, 0.3]
-action_scale: 0.2
+# 보행 파라미터
+step_height: 0.08      # 발 들어올림 높이 (미터)
+gait_frequency: 1.5    # 보행 주기 (Hz)
 
-# 물리적 파라미터
-initial_height: 0.40  # 좀 더 높은 초기 위치
-stabilization_steps: 1000  # 충분한 안정화 기간
+# 초기 물리 파라미터
+initial_height: 0.40    # 시작 높이 (미터)
+stabilization_steps: 1000  # 안정화 단계
+
+# 보행 시퀀스 설정
+gait_sequence:
+  - time: 0.0
+    gait: "stand"
+    command: [0.0, 0.0, 0.0]
+    
+  - time: 5.0
+    gait: "trot"
+    command: [0.3, 0.0, 0.0]
+    
+  - time: 10.0
+    gait: "trot"
+    command: [0.5, 0.0, 0.0]
+    
+  - time: 15.0
+    gait: "trot"
+    command: [0.0, 0.2, 0.0]
+    
+  - time: 20.0
+    gait: "trot"
+    command: [0.0, -0.2, 0.0]
+    
+  - time: 25.0
+    gait: "trot"
+    command: [0.3, 0.0, 0.2]
+    
+  - time: 30.0
+    gait: "trot"
+    command: [0.3, 0.0, -0.2]
+    
+  - time: 35.0
+    gait: "walk"
+    command: [0.3, 0.0, 0.0]
+    
+  - time: 40.0
+    gait: "pace"
+    command: [0.3, 0.0, 0.0]
+    
+  - time: 45.0
+    gait: "bound"
+    command: [0.4, 0.0, 0.0]
+    
+  - time: 50.0
+    gait: "trot"
+    command: [0.3, 0.0, 0.0]
+    
+  - time: 55.0
+    gait: "stand"
+    command: [0.0, 0.0, 0.0]
